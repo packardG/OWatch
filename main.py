@@ -1,60 +1,64 @@
-import webapp2
-from lxml import html
+import os
 import requests
+from flask import Flask, request, Response
 from bs4 import BeautifulSoup
 
+import app as bot
 
-class OWatch(webapp2.RequestHandler):
+app = Flask(__name__)
 
-    def get(self):
-        userID = self.request.get('text')
-        scrape(userID, self)
+SLACK_WEBHOOK_SECRET = os.environ.get('SLACK_WEBHOOK_SECRET')
 
-
-def scrape(userID, self):
-    if userID == 'help':
-        self.response.write(
-            'This slash command is used to return stats from an Overwatch player profile.\n \
+help_msg = 'This slash command is used to return stats from an Overwatch player profile.\n \
 Correct usage example:  /owatch JohnDoe#0420.\n \
-Currently this tool only supports lookups for US PC players, additional support coming soon!')
+Currently this tool only supports lookups for US PC players, additional support coming soon!'
+
+
+@app.route('/slack', methods=['POST'])
+def inbound():
+    if request.form.get('token') == SLACK_WEBHOOK_SECRET:
+        channel = request.form.get('channel_name')
+        channel_id = request.form.get('channel_id')
+        username = request.form.get('user_name')
+        text = request.form.get('text')
+        userID = handleInput(text)
+        if userID == None:
+            bot.send_message(channel_id, help_msg)
+            return Response(), 200
+        else:
+            soup = scrape(userID)
+            headerStats = compileStats(soup)
+            bot.send_message(channel_id, headerStats)
+            inbound_message = username + " in " + channel + " says: " + text
+            print(inbound_message)
+    return Response(), 200
+
+
+@app.route('/', methods=['GET'])
+def test():
+    return Response('It works!')
+
+
+def handleInput(text):
+    args = text.split()
+    if args[0] == 'help':
+        print 'help me!'
+        return None
     else:
-        bnet = userID.split('#', 1)
-        page = requests.get(
-            'http://masteroverwatch.com/profile/pc/us/{}-{}'.format(bnet[0], bnet[1]))
-        data = page.content
-        soup = BeautifulSoup(data)
-        headerStats, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp = compileStats(
-            soup)
-        self.response.write('{}\n'.format(userID))
-        self.response.write('-----------------------------------------\n')
-        self.response.write('Player Overview\n\n')
-        self.response.write('SR:\t {}\n'.format(headerStats[0][0]))
-        self.response.write(
-            'Player is in the {} percentile\n'.format(headerStats[0][1]))
-        self.response.write('US Ranking:\t {}\n'.format(headerStats[1]))
-        self.response.write('W-L-T:\t {}\n'.format(headerStats[2]))
-        self.response.write('Overall Winrate:\t {}\n'.format(headerStats[3]))
-        self.response.write('-----------------------------------------\n')
-        self.response.write('Overall Stats\n')
-        self.response.write('All stats are avgs per min.\n\n')
-        self.response.write('Elims:\t {}\n'.format(overallStats_qp[0]))
-        self.response.write('K/D:\t {}\n'.format(overallStats_qp[1]))
-        self.response.write('Damage:\t {}\n'.format(overallStats_qp[2]))
-        self.response.write('Blocked:\t {}\n'.format(overallStats_qp[3]))
-        self.response.write('Healing:\t {}\n'.format(overallStats_qp[4]))
-        self.response.write('Medals:\t {}\n'.format(overallStats_qp[5]))
-        self.response.write('-----------------------------------------\n')
-        self.response.write('Favorite Heroes\n\n')
-        self.response.write('{}:\n'.format(favHeroes_qp[0][0]))
-        self.response.write('{}\n'.format(favHeroes_qp[0][1]))
-        self.response.write('Character winrate: {}\n\n'.format(favHeroes_qp[0][2]))
-        self.response.write('{}\n'.format(favHeroes_qp[1][0]))
-        self.response.write('{}\n'.format(favHeroes_qp[1][1]))
-        self.response.write('Character winrate: {}\n\n'.format(favHeroes_qp[1][2]))
-        self.response.write('{}\n'.format(favHeroes_qp[2][0]))
-        self.response.write('{}\n'.format(favHeroes_qp[2][1]))
-        self.response.write('Character winrate: {}\n'.format(favHeroes_qp[2][2]))
-        self.response.write('-----------------------------------------\n')
+        userID = args[0].split('#', 1)
+        num_args = len(args)
+        return userID
+
+
+def scrape(userID):
+    page = requests.get(
+        "https://masteroverwatch.com/profile/pc/us/{}-{}".format(userID[0], userID[1]))
+    data = page.content
+    soup = BeautifulSoup(data)
+    return soup
+    #headerStats, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp = compileStats(
+    #    soup)
+
 
 def compileStats(soup):
     # Tried to implement with a dictionary, wouldve been cleaner.
@@ -91,17 +95,7 @@ def compileStats(soup):
         temp = [hero, kd, winp]
         favHeroes_qp.append(temp)
 
-    return headerStats, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp
-
-app = webapp2.WSGIApplication([
-    (r'/', OWatch),
-    (r'/owatch', OWatch)
-])
-
-
-def main():
-    from paste import httpserver
-    httpserver.serve(app, host='localhost', port='8080')
+    return headerStats#, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp
 
 if __name__ == '__main__':
-    main()
+    app.run(debug=True)
