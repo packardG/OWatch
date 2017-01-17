@@ -7,7 +7,7 @@ import app as bot
 
 app = Flask(__name__)
 
-SLACK_WEBHOOK_SECRET = os.environ.get('SLACK_WEBHOOK_SECRET')
+SLACK_SECRET = os.environ.get('SLACK_SECRET')
 
 help_msg = 'This slash command is used to return stats from an Overwatch player profile.\n \
 Correct usage example:  /owatch JohnDoe#0420.\n \
@@ -16,7 +16,7 @@ Currently this tool only supports lookups for US PC players, additional support 
 
 @app.route('/slack', methods=['POST'])
 def inbound():
-    if request.form.get('token') == SLACK_WEBHOOK_SECRET:
+    if request.form.get('token') == SLACK_SECRET:
         channel = request.form.get('channel_name')
         channel_id = request.form.get('channel_id')
         username = request.form.get('user_name')
@@ -27,8 +27,11 @@ def inbound():
             return Response(), 200
         else:
             soup = scrape(userID)
-            headerStats = compileStats(soup)
-            bot.send_message(channel_id, headerStats)
+            headerStats, overallStats_qp, favHeroes_qp = compileStats(soup)
+            bot.send_headerStats(channel_id, '#'.join(userID), headerStats)
+            bot.send_overallStats(channel_id, overallStats_qp)
+            bot.send_favHeroes(channel_id, favHeroes_qp)
+            # bot.send_message(channel_id, headerStats)
             inbound_message = username + " in " + channel + " says: " + text
             print(inbound_message)
     return Response(), 200
@@ -40,6 +43,9 @@ def test():
 
 
 def handleInput(text):
+    if len(text) == 0:
+        print 'No input'
+        return None
     args = text.split()
     if args[0] == 'help':
         print 'help me!'
@@ -56,9 +62,6 @@ def scrape(userID):
     data = page.content
     soup = BeautifulSoup(data)
     return soup
-    #headerStats, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp = compileStats(
-    #    soup)
-
 
 def compileStats(soup):
     # Tried to implement with a dictionary, wouldve been cleaner.
@@ -95,7 +98,7 @@ def compileStats(soup):
         temp = [hero, kd, winp]
         favHeroes_qp.append(temp)
 
-    return headerStats#, overallStats_comp, overallStats_qp, favHeroes_comp, favHeroes_qp
+    return headerStats, overallStats_qp, favHeroes_qp
 
 if __name__ == '__main__':
     app.run(debug=True)
