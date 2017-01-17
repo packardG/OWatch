@@ -1,9 +1,9 @@
 import os
 from slackclient import SlackClient
 
-SLACK_TOKEN = os.environ.get('SLACK_TOKEN')
+SLACK_API_KEY = os.environ.get('SLACK_API_KEY')
 
-sc = SlackClient(SLACK_TOKEN)
+sc = SlackClient(SLACK_API_KEY)
 
 
 def list_channels():

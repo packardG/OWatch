@@ -7,7 +7,7 @@ import app as bot
 
 app = Flask(__name__)
 
-SLACK_SECRET = os.environ.get('SLACK_SECRET')
+SLACK_TOKEN = os.environ.get('SLACK_TOKEN')
 
 help_msg = 'This slash command is used to return stats from an Overwatch player profile.\n \
 Correct usage example:  /owatch JohnDoe#0420.\n \
@@ -16,7 +16,7 @@ Currently this tool only supports lookups for US PC players, additional support 
 
 @app.route('/slack', methods=['POST'])
 def inbound():
-    if request.form.get('token') == SLACK_SECRET:
+    if request.form.get('token') == SLACK_TOKEN:
         channel = request.form.get('channel_name')
         channel_id = request.form.get('channel_id')
         username = request.form.get('user_name')
@@ -27,11 +27,11 @@ def inbound():
             return Response(), 200
         else:
             soup = scrape(userID)
+            # Check here for qp, comp, region, platform, etc.
             headerStats, overallStats_qp, favHeroes_qp = compileStats(soup)
             bot.send_headerStats(channel_id, '#'.join(userID), headerStats)
             bot.send_overallStats(channel_id, overallStats_qp)
             bot.send_favHeroes(channel_id, favHeroes_qp)
-            # bot.send_message(channel_id, headerStats)
             inbound_message = username + " in " + channel + " says: " + text
             print(inbound_message)
     return Response(), 200
